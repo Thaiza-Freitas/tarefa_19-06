@@ -1,0 +1,116 @@
+# ==============================================================================
+# 1. IMPORTAÇÃO DAS BIBLIOTECAS
+# ==============================================================================
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import seaborn as sns
+from sklearn.metrics import classification_report, confusion_matrix
+from sklearn.model_selection import train_test_split
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.linear_model import LogisticRegression
+from sklearn.preprocessing import StandardScaler
+from sklearn.tree import DecisionTreeClassifier
+
+# Configuração visual dos gráficos
+sns.set_theme(style="whitegrid")
+
+# ==============================================================================
+# 2. COLETA E CARREGAMENTO DOS DADOS
+# ==============================================================================
+# Lendo o arquivo enviado
+df = pd.read_csv("diabetes.csv")
+
+print("--- Primeiras linhas da base de dados de Diabetes ---")
+print(df.head(), "\n")
+
+# ==============================================================================
+# 3. PRÉ-PROCESSAMENTO DE DADOS
+# ==============================================================================
+# 3.1. Elementos Faltantes: Verificação básica
+# Nota técnica: Neste dataset, valores '0' em Glucose, BloodPressure, BMI, etc., 
+# costumam indicar dados faltantes ocultos, mas vamos seguir o tratamento padrão de nulos do dataframe.
+faltantes = df.isnull().sum().sum()
+print(f"Elementos faltantes nulos (NaN) encontrados: {faltantes}")
+
+# 3.2. Variáveis Categóricas: 
+# Todas as features preditoras já são numéricas. Apenas a variável alvo 'Outcome' é categórica (0 ou 1).
+print("Variáveis preditoras categóricas para converter: Nenhuma (todas já são numéricas).")
+
+# Separando variáveis independentes (X) e a variável alvo (y)
+X = df.drop(columns=["Outcome"])
+y = df["Outcome"]
+
+# 3.4. Separação de Dados: Divisão 80/20 (MÉTODO 80/20)
+# O parâmetro 'stratify=y' garante que a proporção de diabéticos e não-diabéticos seja igual no treino e no teste.
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y, test_size=0.20, random_state=42, stratify=y
+)
+print(f"Dados de Treino: {X_train.shape[0]} amostras")
+print(f"Dados de Teste: {X_test.shape[0]} amostras (20%)\n")
+
+# 3.3. Normalização: Fundamental para o KNN e Regressão Logística devido às escalas distintas (ex: Insulin vs BMI)
+scaler = StandardScaler()
+X_train_scaled = scaler.fit_transform(X_train)
+X_test_scaled = scaler.transform(X_test)
+
+# ==============================================================================
+# 4. IMPLEMENTAÇÃO, TREINO E AVALIAÇÃO DOS MODELOS
+# ==============================================================================
+modelos = {
+    "Regressão Logística": LogisticRegression(random_state=42),
+    "KNN Classificador (K=5)": KNeighborsClassifier(n_neighbors=5),
+    "Árvore de Decisão": DecisionTreeClassifier(random_state=42, max_depth=5) # max_depth evita overfitting severo
+}
+
+resultados_metricas = {}
+fig, axes = plt.subplots(1, 3, figsize=(18, 5))
+
+for i, (nome, modelo) in enumerate(modelos.items()):
+    # Treinando com os dados escalados
+    modelo.fit(X_train_scaled, y_train)
+
+    # Previsões
+    y_pred = modelo.predict(X_test_scaled)
+
+    # Gerando o relatório de métricas para a tabela
+    report = classification_report(y_test, y_pred, output_dict=True)
+    resultados_metricas[nome] = report
+
+    # Matriz de Confusão para os Gráficos
+    cm = confusion_matrix(y_test, y_pred)
+    sns.heatmap(
+        cm,
+        annot=True,
+        fmt="d",
+        cmap="Oranges",
+        ax=axes[i],
+        cbar=False,
+        xticklabels=["Não Diabético (0)", "Diabético (1)"],
+        yticklabels=["Não Diabético (0)", "Diabético (1)"],
+    )
+    axes[i].set_title(f"{nome}")
+    axes[i].set_ylabel("Real")
+    axes[i].set_xlabel("Previsto")
+
+plt.tight_layout()
+plt.show()
+
+# ==============================================================================
+# 5. COMPARAÇÃO DE DESEMPENHO (TABELA)
+# ==============================================================================
+tabela_dados = []
+for nome, report in resultados_metricas.items():
+    tabela_dados.append(
+        {
+            "Algoritmo": nome,
+            "Acurácia Geral": round(report["accuracy"], 4),
+            "Precisão (Classe 1)": round(report["1"]["precision"], 4),
+            "Recall (Classe 1)": round(report["1"]["recall"], 4),
+            "F1-Score (Classe 1)": round(report["1"]["f1-score"], 4),
+        }
+    )
+
+df_resultados = pd.DataFrame(tabela_dados)
+print("\n--- TABELA COMPARATIVA DE DESEMPENHO ---")
+print(df_resultados.to_string(index=False))
